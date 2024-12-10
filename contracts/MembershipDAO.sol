@@ -15,6 +15,11 @@ contract MembershipDAO is ERC1155, Ownable {
      */
     error MembershipDAO_MembershipAlreadyPurchased(address sender);
 
+    /**
+     * @dev Error thrown when a user attempts to cancel a membership that is not active.
+     */
+     error MembershipDAO_NoActiveMembershipToCancel(address user);
+
     uint256 public totalMemberships;
 
     struct Membership {
@@ -30,16 +35,18 @@ contract MembershipDAO is ERC1155, Ownable {
      * @dev HasMembership:
      * Tracks the membership status of an address. If the value is `true`, the address
      * has an active membership. If `false`, the membership doesn't exist.
-     */
+     */        
     mapping(uint256 => Membership) public memberships;
     mapping(address => bool) public hasMembership;
 
     /**
      * @dev Emit MembershipListed event with the name and cost of the membership.
      * @dev Emit MembershipPurchased event with the user address and the membershipId.
+     * @dev Emit MembershipCanceled event with the user address and the membershipId.
      */
     event MembershipListed(string name, uint256 cost);
     event MembershipPurchased(address indexed user, uint256 membershipId);
+    event MembershipCanceled(address indexed user, uint256 membershipId);
 
     constructor(address owner) ERC1155(owner) Ownable(owner) {}
 
@@ -81,5 +88,22 @@ contract MembershipDAO is ERC1155, Ownable {
         hasMembership[msg.sender] = true;
         _mint(msg.sender, membershipId, 1, "");
         emit MembershipPurchased(msg.sender, membershipId);
+    }
+
+    /**
+     * @param membershipId The ID of the membership to purchase.
+     * @notice Checks for an active membership to cancel.
+     * @dev Burn the membership token
+     * @notice Mark the user as no longer having a membership
+     * Emits a {MembershipCanceled} event.
+     */
+    function cancelMembership(uint256 membershipId) public {
+        if (!hasMembership[msg.sender]) {
+            revert MembershipDAO_NoActiveMembershipToCancel(msg.sender);
+        }
+
+        _burn(msg.sender, membershipId, 1);
+        hasMembership[msg.sender] = false;
+        emit MembershipCanceled(msg.sender, membershipId);
     }
 }

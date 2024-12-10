@@ -132,4 +132,38 @@ describe("MembershipDAO", () => {
       })
     })
   })
+
+  describe("Cancel membership", () => {
+      let membershipName, membershipCost
+
+      beforeEach(async () => {
+        membershipName = "Silver Membership";
+        membershipCost = ethers.parseEther("2");
+
+        // Owner list a membership
+        await membershipDAO.connect(owner).listMembership(membershipName, membershipCost);
+
+        // User buy a membership
+        await membershipDAO.connect(user).buyMembership(0, {
+          value: membershipCost
+        });
+      })
+
+      it("Let user to cancel the membership", async () => {
+        // Check balance before cancelation
+        const balanceBeforeCancelation = await membershipDAO.balanceOf(user.address, 0)
+
+        // Perform the cancellation
+        await membershipDAO.connect(user).cancelMembership(0)
+
+        // Get the balance after cancellation
+        const balanceAfterCancelation = await membershipDAO.balanceOf(user.address, 0)
+
+        // Check the balance should be zero after cancelation
+        expect(balanceAfterCancelation).to.equal(0);
+
+        const result = await membershipDAO.hasMembership(user.address);
+        expect(result).to.equal(false);
+      })
+    })
 })
