@@ -26,9 +26,9 @@ describe("MembershipDAO", () => {
   })
 
   describe("Listing", () => {
-    describe("Success", () => {
-      let membershipName, membershipCost
+    let membershipName, membershipCost
 
+    describe("Success", () => {
       beforeEach(async () => {
         membershipName = "Silver Membership";
         membershipCost = ethers.parseEther("2");
@@ -67,9 +67,9 @@ describe("MembershipDAO", () => {
   })
 
   describe("Buy membership", () => {
-    describe("Success", () => {
-      let membershipName, membershipCost
+    let membershipName, membershipCost
 
+    describe("Success", () => {
       beforeEach(async () => {
         membershipName = "Silver Membership";
         membershipCost = ethers.parseEther("2");
@@ -110,8 +110,6 @@ describe("MembershipDAO", () => {
     })
 
     describe("Failure", () => {
-      let membershipName, membershipCost
-
       beforeEach(async () => {
         membershipName = "Silver Membership";
         membershipCost = ethers.parseEther("2");
@@ -134,8 +132,9 @@ describe("MembershipDAO", () => {
   })
 
   describe("Cancel membership", () => {
-      let membershipName, membershipCost
+    let membershipName, membershipCost
 
+    describe("Success", () => {
       beforeEach(async () => {
         membershipName = "Silver Membership";
         membershipCost = ethers.parseEther("2");
@@ -149,7 +148,7 @@ describe("MembershipDAO", () => {
         });
       })
 
-      it("Let user to cancel the membership", async () => {
+      it("Let user to cancel the membership and emits event", async () => {
         // Check balance before cancelation
         const balanceBeforeCancelation = await membershipDAO.balanceOf(user.address, 0)
 
@@ -162,8 +161,27 @@ describe("MembershipDAO", () => {
         // Check the balance should be zero after cancelation
         expect(balanceAfterCancelation).to.equal(0);
 
+        // Ensure the user has no active membership
         const result = await membershipDAO.hasMembership(user.address);
         expect(result).to.equal(false);
+
+        // Check for membership canceled event
+        filter = membershipDAO.filters.MembershipCanceled(user.address, null);
+        events = await membershipDAO.queryFilter(filter, -1);
+        const args = events[0].args;
+
+        // Validate the arguments
+        expect(args[0]).to.equal(user.address);
+        expect(args[1]).to.equal(0);
       })
     })
+
+    describe("Failure", () => {
+      // Reverts if no active membership exists
+      it("Reject cancelling non-active membership", async () => {
+        await expect(membershipDAO.connect(owner).cancelMembership(0))
+          .to.be.revertedWithCustomError(membershipDAO, "MembershipDAO_NoActiveMembershipToCancel");
+      })
+    })
+  })
 })
