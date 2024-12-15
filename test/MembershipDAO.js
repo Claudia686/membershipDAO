@@ -150,13 +150,13 @@ describe("MembershipDAO", () => {
 
       it("Let user to cancel the membership and emits event", async () => {
         // Check balance before cancelation
-        const balanceBeforeCancelation = await membershipDAO.balanceOf(user.address, 0)
+        const balanceBeforeCancelation = await membershipDAO.balanceOf(user.address, 0);
 
         // Perform the cancellation
-        await membershipDAO.connect(user).cancelMembership(0)
+        await membershipDAO.connect(user).cancelMembership(0);
 
         // Get the balance after cancellation
-        const balanceAfterCancelation = await membershipDAO.balanceOf(user.address, 0)
+        const balanceAfterCancelation = await membershipDAO.balanceOf(user.address, 0);
 
         // Check the balance should be zero after cancelation
         expect(balanceAfterCancelation).to.equal(0);
@@ -181,6 +181,153 @@ describe("MembershipDAO", () => {
       it("Reject cancelling non-active membership", async () => {
         await expect(membershipDAO.connect(owner).cancelMembership(0))
           .to.be.revertedWithCustomError(membershipDAO, "MembershipDAO_NoActiveMembershipToCancel");
+      })
+    })
+  })
+
+  describe("List new membership", () => {
+    let name, cost, voteCount, isApproved
+    describe("Success", () => {
+
+      beforeEach(async () => {
+        name = "Gold Membership";
+        cost = ethers.parseEther("4");
+        voteCount = 0;
+        isApproved = false;
+      })
+
+      // List new membership
+      it("Owner list new membership", async () => {
+        await membershipDAO.connect(owner).listNewMembership(name, cost, voteCount, isApproved);
+        // Fetch the listed membership
+        const result = await membershipDAO.newMembership(0)
+        expect(result.name).to.equal(name);
+        expect(result.cost).to.equal(cost);
+        expect(result.voteCount).to.equal(0);
+        expect(result.isApproved).to.equal(false);
+      })
+
+      // Emits ListedNewMembership event
+      it("Emits listed new membership event", async () => {
+        const currentTotalNewMembership = await membershipDAO.totalNewMembership();
+        await expect(membershipDAO.connect(owner).listNewMembership(name, cost, voteCount, isApproved))
+          .to.emit(membershipDAO, "ListedNewMembership").withArgs(owner.address, currentTotalNewMembership);
+      })
+    })
+
+    describe("Failure", () => {
+      beforeEach(async () => {
+        name = "Gold Membership";
+        cost = ethers.parseEther("4");
+        voteCount = 0;
+        isApproved = false;
+      })
+
+      // No-owner list new membership
+      it("Reverts when nonowner tries to list a new membership", async () => {
+        await expect(membershipDAO.connect(user).listNewMembership(name, cost, voteCount, isApproved))
+          .to.be.reverted;
+      })
+    })
+  })
+
+  describe("Vote", () => {
+    let membershipName, membershipCost, name, cost, voteCount, isApproved
+
+    describe("Success", () => {
+      beforeEach(async () => {
+        // Define first membership
+        membershipName = "Silver Membership";
+        membershipCost = ethers.parseEther("2");
+
+        // Define new membership
+        name = "Gold Membership";
+        cost = ethers.parseEther("4");
+        voteCount = 0;
+        isApproved = false;
+
+        // List a membership
+        await membershipDAO.connect(owner).listMembership(membershipName, membershipCost);
+
+        // Buy memebrship
+        await membershipDAO.connect(user).buyMembership(0, {
+          value: membershipCost
+        });
+
+        // List a new memebrship
+        await membershipDAO.connect(owner).listNewMembership(name, cost, voteCount, isApproved);
+      })
+
+      // User vote for the new membership
+      it("Vote for the new membership", async () => {
+        await membershipDAO.connect(user).vote(0);
+
+        // Check for first vote
+        const result = await membershipDAO.hasVoted(user.address, 0);
+        expect(result).to.equal(true);
+
+        // Check the vote count
+        const newMembershipCount = await membershipDAO.newMembership(0);
+        expect(newMembershipCount.voteCount).to.equal(1);
+      })
+
+      // Emits HasVoted event
+      it("Emits has voted event", async () => {
+        await expect(membershipDAO.connect(user).vote(0)).
+        to.emit(membershipDAO, "HasVoted").withArgs(user.address, 0);
+      });
+
+      it("Checks for new membership total", async () => {
+        // Retrive totalNewMembership
+        const getTotalNewMembership = await membershipDAO.totalNewMembership();
+        expect(getTotalNewMembership).to.equal(1);
+      })
+    })
+
+    describe("Failure", () => {
+      beforeEach(async () => {
+        // Define first membership
+        membershipName = "Silver Membership";
+        membershipCost = ethers.parseEther("2");
+
+        // Define new membership
+        name = "Gold Membership";
+        cost = ethers.parseEther("4");
+        voteCount = 0;
+        isApproved = false;
+
+        // List a membership
+        await membershipDAO.connect(owner).listMembership(membershipName, membershipCost);
+
+        // Buy memebrship
+        await membershipDAO.connect(user).buyMembership(0, {
+          value: membershipCost
+        });
+
+        // List a new memebrship
+        await membershipDAO.connect(owner).listNewMembership(name, cost, voteCount, isApproved);
+      })
+
+      // Reject voting without a valid membership
+      it("Rejects user from voting without membership", async () => {
+        await expect(membershipDAO.connect(owner).vote(0))
+          .to.be.revertedWithCustomError(membershipDAO, "MembershipDAO_UserNotEligibleToVote");
+      })
+
+      // Rejects voting for invalid ID
+      it("Reverts if voting for a non-existent membership ID", async () => {
+        // Call vote function
+        await expect(membershipDAO.connect(user).vote(10))
+          .to.be.revertedWithCustomError(membershipDAO, "MembershipDAO_NewMembershipIsInvalid");
+      })
+
+      // Reject duplicate voting by the same user
+      it("Rejects dublicate vote from the same user", async () => {
+        // User submits their first vote
+        await membershipDAO.connect(user).vote(0);
+        // User submits their second vote, should fail
+        await expect(membershipDAO.connect(user).vote(0))
+          .to.be.revertedWithCustomError(membershipDAO, "MembershipDAO_UserAlreadyVoted");
       })
     })
   })
