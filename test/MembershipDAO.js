@@ -9,7 +9,7 @@ describe("MembershipDAO", () => {
   let membershipDAO, owner
 
   beforeEach(async () => {
-    [owner, user] = await ethers.getSigners();
+    [owner, user, member] = await ethers.getSigners();
 
     // Deploy contract
     const MembershipDAO = await ethers.getContractFactory("MembershipDAO");
@@ -328,6 +328,133 @@ describe("MembershipDAO", () => {
         // User submits their second vote, should fail
         await expect(membershipDAO.connect(user).vote(0))
           .to.be.revertedWithCustomError(membershipDAO, "MembershipDAO_UserAlreadyVoted");
+      })
+    })
+  })
+
+  describe("Approve", () => {
+    let membershipName, membershipCost, name, cost
+    describe("Success", () => {
+
+      beforeEach(async () => {
+        // Define first membership
+        membershipName = "Silver Membership";
+        membershipCost = ethers.parseEther("2");
+
+        // Define new membership
+        name = "Gold Membership";
+        cost = ethers.parseEther("4");
+        voteCount = 0;
+        isApproved = false;
+
+        // List first membership
+        await membershipDAO.connect(owner).listMembership(membershipName, membershipCost);
+
+        // User buy memebrship
+        await membershipDAO.connect(user).buyMembership(0, {
+          value: membershipCost
+        });
+
+        // Member buy memebrship
+        await membershipDAO.connect(member).buyMembership(0, {
+          value: membershipCost
+        });
+
+        // List a new memebrship
+        await membershipDAO.connect(owner).listNewMembership(name, cost, voteCount, isApproved);
+
+        // User vote
+        await membershipDAO.connect(user).vote(0);
+
+        // Member vote
+        await membershipDAO.connect(member).vote(0);
+      })
+
+      it("Should approve and mint NFTs to user and member", async () => {
+        // Get the balances before approval
+        const userBalanceBefore = await membershipDAO.balanceOf(user.address, 0);
+        const memberBalanceBefore = await membershipDAO.balanceOf(member.address, 0);
+
+        // Owner approves the vote
+        await membershipDAO.connect(owner).approve(0);
+
+        // Get the balances after approval
+        const userBalanceAfter = await membershipDAO.balanceOf(user.address, 0);
+        const memberBalanceAfter = await membershipDAO.balanceOf(member.address, 0);
+        expect(userBalanceAfter).to.be.gt(userBalanceBefore);
+        expect(memberBalanceAfter).to.be.gt(memberBalanceBefore);
+      })
+
+      // Check if member and user has a valid membership
+      it("Verify member and user membership", async () => {
+        const memberMembership = await membershipDAO.hasMembership(member.address);
+        expect(memberMembership).to.equal(true);
+
+        const userMembership = await membershipDAO.hasMembership(user.address);
+        expect(userMembership).to.equal(true);
+      })
+
+      // User and member vote for proposal 
+      it("Verify that both users have voted", async () => {
+        const userVote = await membershipDAO.hasVoted(user.address, 0);
+        expect(userVote).to.equal(true);
+
+        const memberVote = await membershipDAO.hasVoted(member.address, 0);
+        expect(memberVote).to.equal(true);
+      })
+
+      // Emits NewMembershipApproved event
+      it("Emits new membership approved event", async () => {
+        await expect(membershipDAO.approve(0))
+          .to.emit(membershipDAO, "NewMembershipApproved").withArgs(0);
+      })
+    })
+
+    describe("Failure", () => {
+      beforeEach(async () => {
+        // Define first membership
+        membershipName = "Silver Membership";
+        membershipCost = ethers.parseEther("2");
+
+        // Define new membership
+        name = "Gold Membership";
+        cost = ethers.parseEther("4");
+        voteCount = 0;
+        isApproved = false;
+
+        // List first membership
+        await membershipDAO.connect(owner).listMembership(membershipName, membershipCost);
+
+        // User buy memebrship
+        await membershipDAO.connect(user).buyMembership(0, {
+          value: membershipCost
+        });
+
+        // Member buy memebrship
+        await membershipDAO.connect(member).buyMembership(0, {
+          value: membershipCost
+        });
+
+        // List a new memebrship
+        await membershipDAO.connect(owner).listNewMembership(name, cost, voteCount, isApproved);
+
+        // User vote
+        await membershipDAO.connect(user).vote(0);
+
+        // // Member vote
+        // await membershipDAO.connect(member).vote(0);
+      })
+
+      // Revert if votes are below two votes
+      it("Rejects for insufficient votes", async () => {
+        await expect(membershipDAO.connect(owner).approve(0))
+          .to.be.revertedWithCustomError(membershipDAO, "MembershipDAO_InsufficientVotesToApprove");
+      })
+
+      // Revert invalid ID
+      it("Revert invalid membership Id", async () => {
+        await expect(membershipDAO.connect(owner).approve(10))
+          .to.be.revertedWithCustomError(membershipDAO, "MembershipDAO_NewMembershipIsInvalid");
       })
     })
   })

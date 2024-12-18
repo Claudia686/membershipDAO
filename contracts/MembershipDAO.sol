@@ -34,9 +34,15 @@ contract MembershipDAO is ERC1155, Ownable {
      * @notice User has already voted on this membership.
      */
     error MembershipDAO_UserAlreadyVoted(address user, uint256 newMembershipId);
+    
+     /**
+      * @notice Insufficient votes to approve;
+      */
+     error MembershipDAO_InsufficientVotesToApprove();
 
     uint256 public totalMemberships;
     uint256 public totalNewMembership;
+    uint256 public requiredVotes = 2;
 
     struct Membership {
         string name;
@@ -65,12 +71,16 @@ contract MembershipDAO is ERC1155, Ownable {
      * @dev hasVoted:
      * Tracks the newMembership status of an address and ID. 
      * If the value is `true`, the address has voted. 
+     * 
+     * @dev voters:
+     * Tracks the addresses that voted for specific ID.
      */        
     mapping(uint256 => Membership) public memberships;
     mapping(address => bool) public hasMembership;
 
     mapping(uint256 => NewMembership) public newMembership;
     mapping(address => mapping(uint256 => bool)) public hasVoted;
+    mapping(uint256 => address[]) public voters;
 
     /**
      * @dev Emit MembershipListed event with the name and cost of the membership.
@@ -78,12 +88,14 @@ contract MembershipDAO is ERC1155, Ownable {
      * @dev Emit MembershipCanceled event with the user address and the membershipId.
      * @dev Emit ListedNewMembership event with the user address and the newMembership.
      * @dev Emit HasVoted event with the user address and the newMembershipId.
+     * @dev Emit NewMembershipApproved event with newMembershipId.
      */
     event MembershipListed(string name, uint256 cost);
     event MembershipPurchased(address indexed user, uint256 membershipId);
     event MembershipCanceled(address indexed user, uint256 membershipId);
     event ListedNewMembership(address indexed user, uint256 newMembership);
     event HasVoted(address indexed user, uint256 newMembershipId);
+    event NewMembershipApproved(uint256 newMembershipId);
 
     constructor(address owner) ERC1155(owner) Ownable(owner) {}
 
@@ -194,6 +206,35 @@ contract MembershipDAO is ERC1155, Ownable {
 
         hasVoted[msg.sender][newMembershipId] = true;
         newMembership[newMembershipId].voteCount++;
+        voters[newMembershipId].push(msg.sender);
         emit HasVoted(msg.sender, newMembershipId);
+    }
+
+    /**
+     * @param newMembershipId Is new membership ID that is approved.
+     * @notice Mark the membership as approved.
+     * @dev Mint tokens for each voter.
+     * @notice Delete the voters after minting.
+     * Emits a {NewMembershipApproved} event indicating the new membership has been approved.
+     * @notice Revert if insufficient votes.
+     */
+    function approve(uint256 newMembershipId) public {
+        if (newMembershipId >= totalNewMembership) {            
+            revert MembershipDAO_NewMembershipIsInvalid(totalNewMembership);
+       }
+
+        if (newMembership[newMembershipId].voteCount >= requiredVotes) {
+            newMembership[newMembershipId].isApproved = true;
+            for (uint256 i = 0; i < voters[newMembershipId].length; i++) {
+            _mint(voters[newMembershipId][i], newMembershipId, 1, "");
+            }
+
+            delete voters[newMembershipId];
+            emit NewMembershipApproved(newMembershipId);
+        }
+
+        else {
+            revert MembershipDAO_InsufficientVotesToApprove();
+        }  
     }
 }
