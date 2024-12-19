@@ -183,7 +183,6 @@ describe("MembershipDAO", () => {
           .to.be.revertedWithCustomError(membershipDAO, "MembershipDAO_NoActiveMembershipToCancel");
       })
     })
-  })
 
   describe("List new membership", () => {
     let name, cost, voteCount, isApproved
@@ -455,6 +454,51 @@ describe("MembershipDAO", () => {
       it("Revert invalid membership Id", async () => {
         await expect(membershipDAO.connect(owner).approve(10))
           .to.be.revertedWithCustomError(membershipDAO, "MembershipDAO_NewMembershipIsInvalid");
+      })
+    })
+  })
+
+  describe("Withdraw", () => {
+    let membershipName, membershipCost, balanceBefore
+    describe("Success", () => {
+
+      beforeEach(async () => {
+        membershipName = "Silver Membership";
+        membershipCost = ethers.parseEther("2");
+
+        // Owner list a membership
+        await membershipDAO.connect(owner).listMembership(membershipName, membershipCost);
+
+        // User buy membership
+        await membershipDAO.connect(user).buyMembership(0, {
+          value: membershipCost
+        });
+
+        // Check owner balance before withdraw
+        balanceBefore = await ethers.provider.getBalance(owner.address)
+
+        // Owner call withdraw
+        await membershipDAO.connect(owner).withdraw()
+      })
+
+      // Check owner balance after withdraw
+      it("Updates the owner balance", async () => {
+        const balanceAfter = await ethers.provider.getBalance(owner.address);
+        expect(balanceAfter).to.be.gt(balanceBefore);
+      })
+
+      // Check contract balance after withdraw
+      it("Updates the contract balance", async () => {
+        const contractBalanceAfter = await ethers.provider.getBalance(membershipDAO.target);
+        expect(contractBalanceAfter).to.equal(0);
+      })
+    })
+
+    describe("Failure", () => {
+      // Verify only the owner can call withdraw
+      it("Rejects non-owner from withdrawing", async () => {
+        await expect(membershipDAO.connect(member).withdraw())
+          .to.be.reverted;
       })
     })
   })

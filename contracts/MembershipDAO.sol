@@ -237,4 +237,12 @@ contract MembershipDAO is ERC1155, Ownable {
             revert MembershipDAO_InsufficientVotesToApprove();
         }  
     }
+
+    /**
+     * @dev Only Owner can withdraw funds.
+     * @notice Perform the withdrawal using call to send Ether to the owner.
+     */
+    function withdraw() public onlyOwner {
+        (bool success, ) = owner().call{value: address(this).balance}("");
+    }
 }
