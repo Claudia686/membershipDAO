@@ -74,13 +74,16 @@ contract MembershipDAO is ERC1155, Ownable {
      * 
      * @dev voters:
      * Tracks the addresses that voted for specific ID.
+     * 
+     * @dev deposit:
+     * Store the deposit amount and membership ID.
      */        
     mapping(uint256 => Membership) public memberships;
     mapping(address => bool) public hasMembership;
-
     mapping(uint256 => NewMembership) public newMembership;
     mapping(address => mapping(uint256 => bool)) public hasVoted;
     mapping(uint256 => address[]) public voters;
+    mapping(uint256 => uint256) public deposit;
 
     /**
      * @dev Emit MembershipListed event with the name and cost of the membership.
@@ -120,6 +123,7 @@ contract MembershipDAO is ERC1155, Ownable {
      * @dev Reverts if the payment amount is incorrect or if the caller already has a membership.
      * @param membershipId The ID of the membership to purchase. 
      * @dev Returns true if the user purchased a membership, false otherwise.
+     * @notice Track the deposit for refund.
      * @dev Mints 1 NFT to the user after buying a membership.
      * @notice The NFT represents proof of membership.
      * Emits a {MembershipPurchased} event. 
@@ -135,6 +139,7 @@ contract MembershipDAO is ERC1155, Ownable {
         }
 
         hasMembership[msg.sender] = true;
+        deposit[membershipId] = msg.value;
         _mint(msg.sender, membershipId, 1, "");
         emit MembershipPurchased(msg.sender, membershipId);
     }
@@ -142,6 +147,9 @@ contract MembershipDAO is ERC1155, Ownable {
     /**
      * @param membershipId The ID of the membership to purchase.
      * @notice Checks for an active membership to cancel.
+     * @notice Retrive the refund amount.
+     * @dev The call method is used to transfer ETH to the user's address.
+     * @dev Notice we transfer first before burning the NFT.
      * @dev Burn the membership token.
      * @notice Mark the user as no longer having a membership.
      * Emits a {MembershipCanceled} event.
@@ -149,6 +157,13 @@ contract MembershipDAO is ERC1155, Ownable {
     function cancelMembership(uint256 membershipId) public {
         if (!hasMembership[msg.sender]) {
             revert MembershipDAO_NoActiveMembershipToCancel(msg.sender);
+        }
+
+        uint256 refundAmount = deposit[membershipId];
+        
+        if (refundAmount > 0 ) {
+            (bool success, ) = msg.sender.call{value: refundAmount}("");
+            deposit[membershipId] = 0;
         }
 
         _burn(msg.sender, membershipId, 1);

@@ -81,7 +81,6 @@ describe("MembershipDAO", () => {
 
       // Buy first membership
       it("User buys first membership", async () => {
-
         // Get the user's token balance for the membership ID before minting
         const balanceBefore = await membershipDAO.balanceOf(user.address, 0);
 
@@ -148,7 +147,28 @@ describe("MembershipDAO", () => {
         });
       })
 
-      it("Let user to cancel the membership and emits event", async () => {
+      // Refund ETH to the user
+      it("Should refund the user after membership cancellation", async () => {
+        // Check for user balance before refund
+        const balanceBeforeRefund = await ethers.provider.getBalance(user.address);
+
+        // Check for contract balance before refund
+        const contractBalanceBefore = await ethers.provider.getBalance(membershipDAO.target);
+
+        // Perform the cancellation
+        await membershipDAO.connect(user).cancelMembership(0);
+
+        // Check user balance after refund 
+        const balanceAfterRefund = await ethers.provider.getBalance(user.address);
+        expect(balanceAfterRefund).to.be.gt(balanceBeforeRefund);
+
+        // Check contract balance after refund
+        const contractBalanceAfter = await ethers.provider.getBalance(membershipDAO.target);
+        expect(contractBalanceAfter).to.equal(0);
+      })
+
+      // Burn user NFT
+      it("Should burn the membership token when canceled", async () => {
         // Check balance before cancelation
         const balanceBeforeCancelation = await membershipDAO.balanceOf(user.address, 0);
 
@@ -160,12 +180,22 @@ describe("MembershipDAO", () => {
 
         // Check the balance should be zero after cancelation
         expect(balanceAfterCancelation).to.equal(0);
+      })
 
+      // Update the membership
+      it("Should update the membership status after cancellation", async () => {
+        // Perform the cancellation
+        await membershipDAO.connect(user).cancelMembership(0);
         // Ensure the user has no active membership
         const result = await membershipDAO.hasMembership(user.address);
         expect(result).to.equal(false);
+      })
 
-        // Check for membership canceled event
+      // Check for membership canceled event
+      it("Should emit membership canceled event", async () => {
+        // Perform the cancellation
+        await membershipDAO.connect(user).cancelMembership(0);
+
         filter = membershipDAO.filters.MembershipCanceled(user.address, null);
         events = await membershipDAO.queryFilter(filter, -1);
         const args = events[0].args;
@@ -276,6 +306,7 @@ describe("MembershipDAO", () => {
           to.emit(membershipDAO, "HasVoted").withArgs(user.address, 0);
         });
 
+        // Check for total new membership
         it("Checks for new membership total", async () => {
           // Retrive totalNewMembership
           const getTotalNewMembership = await membershipDAO.totalNewMembership();
@@ -369,6 +400,7 @@ describe("MembershipDAO", () => {
           await membershipDAO.connect(member).vote(0);
         })
 
+        // Approve and mints
         it("Should approve and mint NFTs to user and member", async () => {
           // Get the balances before approval
           const userBalanceBefore = await membershipDAO.balanceOf(user.address, 0);
@@ -384,7 +416,7 @@ describe("MembershipDAO", () => {
           expect(memberBalanceAfter).to.be.gt(memberBalanceBefore);
         })
 
-        // Check if member and user has a valid membership
+        // Check for valid membership
         it("Verify member and user membership", async () => {
           const memberMembership = await membershipDAO.hasMembership(member.address);
           expect(memberMembership).to.equal(true);
